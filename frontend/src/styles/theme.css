@@ -1,0 +1,44 @@
+/* 业务主题变量：通过 html.dark 类切换 */
+:root {
+  --app-bg: #f0f2f5;
+  --app-aside-bg: #001529;
+  --app-aside-text: #b7bdc6;
+  --app-aside-active: #fff;
+  --app-aside-active-bg: #1890ff;        /* 激活项背景 */
+  --app-aside-hover-bg: #2d3a4a;          /* hover 项背景 */
+  --app-aside-border: #1d2b3f;
+  --app-header-bg: #fff;
+  --app-header-border: #ebeef5;
+  --app-card-bg: #fff;
+  --app-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  --app-text: #303133;
+  --app-text-secondary: #909399;
+  --app-text-placeholder: #c0c4cc;
+  --app-hover-bg: #f5f7fa;
+  --app-border-color: #ebeef5;
+  --app-code-bg: #f5f7fa;                 /* 代码块/内容块背景 */
+  --app-code-text: #303133;               /* 代码块文字 */
+  --app-accent: #e6a23c;                  /* 强调色（提示标签等） */
+}
+
+html.dark {
+  --app-bg: #141414;
+  --app-aside-bg: #1d1e1f;
+  --app-aside-text: #c9d1d9;
+  --app-aside-active: #ffd04b;
+  --app-aside-active-bg: #26457f;          /* 暗色激活项背景（蓝灰） */
+  --app-aside-hover-bg: #2a2b2c;           /* 暗色 hover 背景 */
+  --app-aside-border: #2c2c2c;
+  --app-header-bg: #1d1e1f;
+  --app-header-border: #303030;
+  --app-card-bg: #1d1e1f;
+  --app-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  --app-text: #e5eaf3;
+  --app-text-secondary: #a3a6ad;
+  --app-text-placeholder: #6e7681;
+  --app-hover-bg: #262727;
+  --app-border-color: #303030;
+  --app-code-bg: #262727;
+  --app-code-text: #e5eaf3;
+  --app-accent: #e6a23c;
+}
