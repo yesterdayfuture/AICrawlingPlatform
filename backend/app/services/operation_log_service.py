@@ -153,10 +153,16 @@ def log_from_request(
                 user_id = payload.get("uid")
                 username = payload.get("username", "") or ""
 
-    # 仅记录 query 参数（body 已被路由消费，无法安全读取）
+    # 合并 query 参数和 body 参数
     params_dict = {}
+    # 1. query 参数
     for k, v in request.query_params.items():
         params_dict[k] = v
+    # 2. body 参数（从 request.state.body_data 读取，由中间件提前解析）
+    body_data = getattr(request.state, "body_data", None)
+    if body_data and isinstance(body_data, dict):
+        params_dict.update(body_data)
+
     params = json.dumps(_mask_sensitive(params_dict), ensure_ascii=False) if params_dict else ""
 
     status = "success" if 200 <= status_code < 400 else "failed"

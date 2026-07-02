@@ -14,6 +14,7 @@
 | 任务结果 | CRUD、查询、分页、状态过滤、详情查看每个地址结果与异常信息、点击解析选择模型+提示词 |
 | 解析结果 | CRUD、查询、分页、状态过滤、详情含原始输入/输出、输入/输出/总 tokens、速度、耗时、异常信息 |
 | 用户管理 | 管理员可见：新增/编辑/删除/禁用启用普通用户、角色分配 |
+| 操作日志 | 管理员可见：记录用户写操作（POST/PUT/DELETE），含完整请求参数（query + body，敏感字段已脱敏）、IP、耗时、状态码，支持关键词/用户名/模块/动作/状态/时间范围筛选，详情抽屉查看完整参数 |
 | 个人中心 | 修改昵称、邮箱、密码 |
 | 认证 | JWT 登录、token 失效自动跳转登录页、基于角色的访问控制 + 数据权限过滤 |
 
@@ -54,6 +55,7 @@ CrawlerManagementSystem/
 │   │   ├── schemas.py           Pydantic 校验模型
 │   │   ├── security.py          密码哈希 + JWT 签发/校验 + 依赖注入
 │   │   ├── common.py            统一响应 / 分页 / 时间范围解析
+│   │   ├── tz.py                时区工具（北京时间 UTC+8）
 │   │   ├── routers/             路由模块 + 通用过滤器
 │   │   │   ├── _filters.py      名称/描述/状态/时间 统一过滤
 │   │   │   ├── _owner.py        数据权限过滤（管理员/普通用户可见性）
@@ -65,12 +67,14 @@ CrawlerManagementSystem/
 │   │   │   ├── prompts.py       提示词 CRUD（带权限）
 │   │   │   ├── tasks.py         任务 CRUD + 立即执行 + 定时启停（带权限）
 │   │   │   ├── task_results.py  任务结果 CRUD + 解析触发（带权限）
-│   │   │   └── parse_results.py 解析结果 CRUD（带权限）
+│   │   │   ├── parse_results.py 解析结果 CRUD（带权限）
+│   │   │   └── operation_logs.py 操作日志查询 + 清理（管理员）
 │   │   └── services/
-│   │       ├── crawler_service.py   GET/POST 抓取 + 任务执行
-│   │       ├── scheduler_service.py APScheduler 定时调度管理
-│   │       ├── llm_service.py       OpenAI 协议解析
-│   │       └── export_service.py    通用数据导出（JSON/CSV/Excel）
+│   │       ├── crawler_service.py       GET/POST 抓取 + 任务执行
+│   │       ├── scheduler_service.py     APScheduler 定时调度管理
+│   │       ├── operation_log_service.py 操作日志：路径推断 + 写日志 + 脱敏
+│   │       ├── llm_service.py           OpenAI 协议解析
+│   │       └── export_service.py        通用数据导出（JSON/CSV/Excel）
 │   ├── requirements.txt
 │   └── run.sh                   启动脚本
 └── frontend/
@@ -117,6 +121,7 @@ CrawlerManagementSystem/
 | `task_results` | 任务执行结果（status, duration, success_count, failed_count, error_message） |
 | `task_result_items` | 单个爬虫的抓取结果（status_code, content, error_message, duration） |
 | `parse_results` | 解析结果（raw_input, raw_output, parsed_content, input/output/total_tokens, speed, duration） |
+| `operation_logs` | 操作日志（user_id, username, module, action, method, path, params, status, status_code, ip, user_agent, error_msg, duration_ms） |
 
 ## 快速开始
 
@@ -225,6 +230,35 @@ cp backend/.env.example backend/.env
 - `SearchToolbar.vue` 是所有列表页复用的搜索组件，统一定义查询条件
 - Element Plus 已配置中文本地化（`zhCn`）
 - 前端 IDE 中若提示 `v-model:current-page` 报错，是 Vue 2 风格的 lint 规则误报，Vue 3 + Element Plus 必须使用该参数式语法，不影响构建
+
+## 时区约定
+
+项目统一使用**北京时间（UTC+8）**存储和展示时间。
+
+- `app/tz.py` 提供 `now_cst()` 函数，返回 naive datetime（无时区信息）
+- 所有业务表时间字段（`created_at` / `updated_at` / `started_at` / `finished_at` / `last_login_at` / `last_run_at`）统一使用 `now_cst()`
+- 前端 dayjs 解析无时区字符串时按本地时区处理，正好显示北京时间
+- 调度器时区固定 `Asia/Shanghai`，与业务时间保持一致
+- **唯一例外**：JWT `exp` 仍用 `datetime.utcnow()`，符合 JWT 标准
+
+## 操作日志
+
+系统自动记录用户的写操作（POST/PUT/DELETE），管理员可在「操作日志」页面查看。
+
+### 记录范围
+
+通过 `services/operation_log_service.py` 中的 `_PATH_RULES` 映射表定义哪些路径需要记录。仅记录映射表中存在的路径，未匹配的路径不记录。
+
+### 请求参数记录
+
+中间件（`main.py` 的 `operation_log_middleware`）会提前读取请求 body（仅 `Content-Type: application/json`），存入 `request.state.body_data`，日志服务合并 query 参数和 body 参数后存入 `params` 字段。
+
+- 敏感字段自动脱敏为 `***`（`password`、`api_key`、`token`、`secret` 等）
+- 前端详情抽屉可查看完整 JSON 格式的请求参数
+
+### 日志清理
+
+管理员可通过 `DELETE /api/operation-logs?before_days=N` 清理 N 天前的日志，`before_days=0` 清空全部。
 
 ## 定时任务调度
 

@@ -66,8 +66,22 @@ async def operation_log_middleware(request: Request, call_next):
     if method == "GET" or path in ("/api/health", "/docs", "/openapi.json", "/redoc") or path == "/api/auth/login":
         return await call_next(request)
     # 仅记录在路径映射表中的请求
-    if not resolve_module_action(method, path)[0]:
+    module, _ = resolve_module_action(method, path)
+    if not module:
         return await call_next(request)
+
+    # 读取 body（仅对 JSON 且 Content-Type 为 application/json 的请求）
+    body_data = None
+    if request.headers.get("content-type", "").startswith("application/json"):
+        try:
+            body_bytes = await request.body()
+            if body_bytes:
+                import json
+                body_data = json.loads(body_bytes.decode("utf-8"))
+        except Exception:
+            pass  # body 读取失败不影响业务
+    # 存入 request.state 供日志服务使用
+    request.state.body_data = body_data
 
     start = time.time()
     status_code = 200
