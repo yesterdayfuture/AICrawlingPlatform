@@ -125,6 +125,9 @@ export const taskApi = {
   update: (id, data) => http.put(`/tasks/${id}`, data),
   remove: (id) => http.delete(`/tasks/${id}`),
   run: (id) => http.post(`/tasks/${id}/run`),
+  startSchedule: (id) => http.post(`/tasks/${id}/schedule/start`),
+  pauseSchedule: (id) => http.post(`/tasks/${id}/schedule/pause`),
+  stopSchedule: (id) => http.post(`/tasks/${id}/schedule/stop`),
   export: (opts) => requestExport('/tasks/export', opts)
 }
 

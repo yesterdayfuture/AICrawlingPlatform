@@ -21,9 +21,11 @@
             <span v-if="!row.crawler_names || !row.crawler_names.length" style="color:var(--app-text-placeholder)">未关联</span>
           </template>
         </el-table-column>
-        <el-table-column label="定时" width="130">
+        <el-table-column label="定时" width="160">
           <template #default="{ row }">
-            <el-tag v-if="row.is_scheduled" type="warning" size="small">每 {{ row.interval_value }} {{ unitText(row.interval_unit) }}</el-tag>
+            <el-tag v-if="row.is_scheduled" :type="scheduleTagType(row)" size="small">
+              {{ scheduleText(row) }}
+            </el-tag>
             <span v-else style="color:var(--app-text-placeholder)">手动</span>
           </template>
         </el-table-column>
@@ -40,9 +42,12 @@
         <el-table-column prop="created_at" label="创建时间" width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
             <el-button link type="success" :icon="VideoPlay" @click="onRun(row)">执行</el-button>
+            <el-button v-if="canStartSchedule(row)" link type="primary" :icon="VideoPlay" @click="onStartSchedule(row)">启动定时</el-button>
+            <el-button v-if="row.is_scheduled && row.status === 'enabled'" link type="warning" :icon="VideoPause" @click="onPauseSchedule(row)">暂停</el-button>
+            <el-button v-if="row.is_scheduled" link type="danger" :icon="CircleClose" @click="onStopSchedule(row)">停止定时</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="onRemove(row)">删除</el-button>
           </template>
@@ -131,7 +136,7 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
-import { Plus, InfoFilled, VideoPlay, Download } from '@element-plus/icons-vue'
+import { Plus, InfoFilled, VideoPlay, VideoPause, CircleClose, Download } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { taskApi, crawlerApi, buildListParams } from '@/api'
 import SearchToolbar from '@/components/SearchToolbar.vue'
@@ -142,6 +147,21 @@ const statusOptions = [
   { label: '禁用', value: 'disabled' }
 ]
 const unitText = (u) => ({ min: '分钟', hour: '小时', day: '天', month: '月' }[u] || u)
+
+// 调度状态显示
+const scheduleText = (row) => {
+  if (!row.is_scheduled) return '手动'
+  const interval = `每 ${row.interval_value} ${unitText(row.interval_unit)}`
+  return row.status === 'enabled' ? interval : `${interval}（已暂停）`
+}
+const scheduleTagType = (row) => {
+  if (!row.is_scheduled) return 'info'
+  return row.status === 'enabled' ? 'success' : 'warning'
+}
+// 启动定时按钮显示条件：未开启定时，或定时已暂停
+const canStartSchedule = (row) => {
+  return !row.is_scheduled || (row.is_scheduled && row.status !== 'enabled')
+}
 
 const loading = ref(false)
 const list = ref([])
@@ -216,6 +236,27 @@ const onRun = async (row) => {
   } finally {
     loading.close()
   }
+  loadList()
+}
+
+const onStartSchedule = async (row) => {
+  await ElMessageBox.confirm(`确认启动任务「${row.name}」的定时调度？`, '提示', { type: 'info' })
+  await taskApi.startSchedule(row.id)
+  ElMessage.success('定时已启动')
+  loadList()
+}
+
+const onPauseSchedule = async (row) => {
+  await ElMessageBox.confirm(`确认暂停任务「${row.name}」的定时调度？`, '提示', { type: 'warning' })
+  await taskApi.pauseSchedule(row.id)
+  ElMessage.success('定时已暂停')
+  loadList()
+}
+
+const onStopSchedule = async (row) => {
+  await ElMessageBox.confirm(`确认停止任务「${row.name}」的定时调度？停止后将回到手动模式。`, '提示', { type: 'warning' })
+  await taskApi.stopSchedule(row.id)
+  ElMessage.success('定时已停止')
   loadList()
 }
 

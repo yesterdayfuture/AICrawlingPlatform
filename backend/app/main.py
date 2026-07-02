@@ -9,6 +9,7 @@ from .database import init_db, SessionLocal
 from .models import User
 from .security import hash_password
 from .services.operation_log_service import resolve_module_action, log_from_request
+from .services.scheduler_service import start_scheduler, shutdown_scheduler
 
 
 def seed_admin():
@@ -35,7 +36,9 @@ def seed_admin():
 async def lifespan(app: FastAPI):
     init_db()
     seed_admin()
+    start_scheduler()
     yield
+    shutdown_scheduler()
 
 
 app = FastAPI(

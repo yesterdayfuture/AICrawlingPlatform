@@ -11,6 +11,7 @@ from ._owner import filter_by_owner, ensure_readable, ensure_editable, attach_ow
 from ..security import get_current_user
 from ..services.crawler_service import run_task
 from ..services.export_service import build_export_response
+from ..services.scheduler_service import schedule_task, unschedule_task
 
 router = APIRouter()
 
@@ -108,6 +109,7 @@ def create_task(
         db.add(TaskCrawler(task_id=item.id, crawler_id=cid))
     db.commit()
     db.refresh(item)
+    schedule_task(item)
     return success(_to_out(db, item), msg="创建成功")
 
 
@@ -138,6 +140,7 @@ def update_task(
             db.add(TaskCrawler(task_id=task_id, crawler_id=cid))
     db.commit()
     db.refresh(item)
+    schedule_task(item)
     return success(_to_out(db, item), msg="更新成功")
 
 
@@ -153,6 +156,7 @@ def delete_task(
     ensure_editable(item, current)
     db.delete(item)
     db.commit()
+    unschedule_task(task_id)
     return success(msg="删除成功")
 
 
@@ -172,3 +176,60 @@ def run_task_now(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return success({"result_id": result.id, "status": result.status}, msg="执行完成")
+
+
+@router.post("/{task_id}/schedule/start")
+def start_schedule(
+    task_id: int,
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """启动定时：开启调度并按 interval 周期执行"""
+    item = db.query(Task).filter(Task.id == task_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    ensure_editable(item, current)
+    if not item.interval_value or item.interval_value < 1:
+        raise HTTPException(status_code=400, detail="请先设置有效的定时间隔")
+    item.is_scheduled = True
+    item.status = "enabled"
+    db.commit()
+    db.refresh(item)
+    schedule_task(item)
+    return success(_to_out(db, item), msg="定时已启动")
+
+
+@router.post("/{task_id}/schedule/pause")
+def pause_schedule(
+    task_id: int,
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """暂停定时：临时停止调度，保留定时配置便于后续恢复"""
+    item = db.query(Task).filter(Task.id == task_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    ensure_editable(item, current)
+    item.status = "disabled"
+    db.commit()
+    db.refresh(item)
+    schedule_task(item)
+    return success(_to_out(db, item), msg="定时已暂停")
+
+
+@router.post("/{task_id}/schedule/stop")
+def stop_schedule(
+    task_id: int,
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """停止定时：关闭定时模式，回到手动执行"""
+    item = db.query(Task).filter(Task.id == task_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    ensure_editable(item, current)
+    item.is_scheduled = False
+    db.commit()
+    db.refresh(item)
+    schedule_task(item)
+    return success(_to_out(db, item), msg="定时已停止")

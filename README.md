@@ -10,7 +10,7 @@
 | 爬虫地址 | CRUD、名称/描述模糊+精准查询、分页+页大小、状态过滤、GET/POST 配置（headers/params/body）、表单内提示样例 |
 | 大模型管理 | CRUD、查询、分页、状态过滤；后端用 `openai` 库调用（兼容 OpenAI 协议服务商：OpenAI / DeepSeek / Moonshot 等） |
 | 提示词管理 | CRUD、查询、分页、状态过滤，支持 `{content}` 占位符引用待解析内容 |
-| 任务中心 | CRUD、查询、分页、状态过滤、多选爬虫、定时配置（分/时/日/月）+ 立即执行 |
+| 任务中心 | CRUD、查询、分页、状态过滤、多选爬虫、定时调度（分/时/日/月，基于 APScheduler）+ 立即执行 + 启动/暂停/停止定时 |
 | 任务结果 | CRUD、查询、分页、状态过滤、详情查看每个地址结果与异常信息、点击解析选择模型+提示词 |
 | 解析结果 | CRUD、查询、分页、状态过滤、详情含原始输入/输出、输入/输出/总 tokens、速度、耗时、异常信息 |
 | 用户管理 | 管理员可见：新增/编辑/删除/禁用启用普通用户、角色分配 |
@@ -27,6 +27,7 @@
 - Pydantic v2 数据校验
 - httpx 爬虫请求客户端
 - openai 官方库调用 LLM
+- APScheduler 3.10 定时任务调度（BackgroundScheduler 后台线程）
 - JWT 认证 + bcrypt 密码哈希
 - SQLite（默认）或 PostgreSQL
 
@@ -62,13 +63,14 @@ CrawlerManagementSystem/
 │   │   │   ├── crawlers.py      爬虫地址 CRUD（带权限）
 │   │   │   ├── models.py        大模型 CRUD（带权限）
 │   │   │   ├── prompts.py       提示词 CRUD（带权限）
-│   │   │   ├── tasks.py         任务 CRUD + 立即执行（带权限）
+│   │   │   ├── tasks.py         任务 CRUD + 立即执行 + 定时启停（带权限）
 │   │   │   ├── task_results.py  任务结果 CRUD + 解析触发（带权限）
 │   │   │   └── parse_results.py 解析结果 CRUD（带权限）
 │   │   └── services/
-│   │       ├── crawler_service.py  GET/POST 抓取 + 任务执行
-│   │       ├── llm_service.py      OpenAI 协议解析
-│   │       └── export_service.py   通用数据导出（JSON/CSV/Excel）
+│   │       ├── crawler_service.py   GET/POST 抓取 + 任务执行
+│   │       ├── scheduler_service.py APScheduler 定时调度管理
+│   │       ├── llm_service.py       OpenAI 协议解析
+│   │       └── export_service.py    通用数据导出（JSON/CSV/Excel）
 │   ├── requirements.txt
 │   └── run.sh                   启动脚本
 └── frontend/
@@ -110,7 +112,7 @@ CrawlerManagementSystem/
 | `crawlers` | 爬虫地址（name, url, method, headers, params, body, status, owner_id, is_public） |
 | `llm_models` | 大模型（provider, base_url, api_key, model_name, temperature, max_tokens, owner_id, is_public） |
 | `prompts` | 提示词（system_prompt, user_prompt 支持 `{content}` 占位符, owner_id, is_public） |
-| `tasks` | 任务（is_scheduled, interval_value, interval_unit, last_run_at, owner_id, is_public） |
+| `tasks` | 任务（is_scheduled, interval_value, interval_unit, last_run_at, owner_id, is_public）—— `is_scheduled` + `status='enabled'` 决定是否被 APScheduler 调度 |
 | `task_crawlers` | 任务-爬虫多对多关联表 |
 | `task_results` | 任务执行结果（status, duration, success_count, failed_count, error_message） |
 | `task_result_items` | 单个爬虫的抓取结果（status_code, content, error_message, duration） |
@@ -126,13 +128,15 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
 
-# 默认使用 SQLite，启动时自动建表
+# 默认使用 SQLite，启动时自动建表 + 恢复已存在的定时任务
 python main.py                 # 直接启动（默认开启热重载）
 # 或自定义参数
 python main.py --host 0.0.0.0 --port 8000 --no-reload
 # 或使用 uvicorn
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+> 应用启动时会自动启动 APScheduler 后台调度器，并从数据库恢复所有 `is_scheduled=True 且 status='enabled'` 的任务到调度器中。
 
 切换 PostgreSQL：编辑 `backend/.env` 设置 `DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/dbname`，然后重新启动。
 
@@ -186,7 +190,7 @@ cp backend/.env.example backend/.env
 2. **配置爬虫地址**：在「爬虫地址」页新增目标 URL，选择 GET/POST，填写 headers/params/body
 3. **配置大模型**：在「大模型管理」页填写 base_url、api_key、model_name（兼容 OpenAI 协议的服务商均可）
 4. **配置提示词**：在「提示词管理」页编写 system/user prompt，可用 `{content}` 占位符
-5. **创建任务**：在「任务中心」多选爬虫，按需开启定时（分/时/日/月），点击「执行」立即运行
+5. **创建任务**：在「任务中心」多选爬虫，按需开启定时（分/时/日/月），点击「执行」立即运行；或配置好间隔后通过操作列「启动定时」让任务按周期自动执行，支持随时「暂停」/「停止定时」
 6. **查看结果**：在「任务结果」点击「详情」查看每个地址的抓取内容与异常；点击「解析」选择模型+提示词
 7. **查看解析**：在「解析结果」点击「详情」查看原始输入/输出、tokens 用量、速度、耗时
 8. **用户管理**（管理员）：在「用户管理」新增普通用户、分配角色、禁用/启用/删除
@@ -204,7 +208,7 @@ cp backend/.env.example backend/.env
 | 爬虫 | `/api/crawlers` | `GET / /all /{id}`、`POST /`、`PUT /{id}`、`DELETE /{id}`、`GET /export` |
 | 大模型 | `/api/models` | 同上 |
 | 提示词 | `/api/prompts` | 同上 |
-| 任务 | `/api/tasks` | CRUD + `POST /{id}/run` + `GET /export` |
+| 任务 | `/api/tasks` | CRUD + `POST /{id}/run`（立即执行） + `POST /{id}/schedule/start`（启动定时） + `POST /{id}/schedule/pause`（暂停定时） + `POST /{id}/schedule/stop`（停止定时） + `GET /export` |
 | 任务结果 | `/api/task-results` | CRUD + `POST /{id}/parse` + `GET /export` |
 | 解析结果 | `/api/parse-results` | CRUD + `GET /export` |
 
@@ -221,3 +225,42 @@ cp backend/.env.example backend/.env
 - `SearchToolbar.vue` 是所有列表页复用的搜索组件，统一定义查询条件
 - Element Plus 已配置中文本地化（`zhCn`）
 - 前端 IDE 中若提示 `v-model:current-page` 报错，是 Vue 2 风格的 lint 规则误报，Vue 3 + Element Plus 必须使用该参数式语法，不影响构建
+
+## 定时任务调度
+
+任务支持定时执行，基于 `APScheduler` 的 `BackgroundScheduler` 实现，调度器在应用 `lifespan` 中随服务启动/关闭。
+
+### 调度模型
+
+一个任务是否被调度，由两个字段共同决定：
+- `is_scheduled = True` 且 `status = 'enabled'`：调度器中存在对应 job，按周期执行
+- `is_scheduled = True` 且 `status = 'disabled'`：暂停态，配置保留但不会被触发
+- `is_scheduled = False`：手动模式，无论 `status` 如何都不会被调度
+
+### 间隔单位
+
+| 单位 | 含义 | 触发器 |
+| --- | --- | --- |
+| `min` | 每 N 分钟 | `IntervalTrigger(minutes=N)` |
+| `hour` | 每 N 小时 | `IntervalTrigger(hours=N)` |
+| `day` | 每 N 天 | `IntervalTrigger(days=N)` |
+| `month` | 每 N 个月 | `CronTrigger(day=1, month='*/N', hour=0, minute=0)` |
+
+### 控制接口
+
+| 接口 | 行为 | 字段变化 |
+| --- | --- | --- |
+| `POST /api/tasks/{id}/schedule/start` | 启动定时 | `is_scheduled=True, status=enabled` → 注册 job |
+| `POST /api/tasks/{id}/schedule/pause` | 暂停定时 | `status=disabled` → 移除 job（配置保留） |
+| `POST /api/tasks/{id}/schedule/stop` | 停止定时 | `is_scheduled=False` → 移除 job，回手动 |
+
+创建/更新/删除任务时，路由层会自动同步调度器状态（`schedule_task` / `unschedule_task`）。
+
+### 实现要点
+
+- 调度器单例：`services/scheduler_service.py` 中的 `_scheduler`，`MemoryJobStore` 存储
+- job_id 约定：`task_{id}`，`max_instances=1, coalesce=True` 防止重叠与积压
+- 执行入口：`_run_scheduled_task(task_id)` 在调度器线程中运行，使用独立 `SessionLocal()`，避免与请求级 Session 冲突
+- 启动恢复：`start_scheduler()` 会扫描 DB 中 `is_scheduled=True 且 status='enabled'` 的任务重新注册
+- 时区：调度器统一使用 `Asia/Shanghai`
+

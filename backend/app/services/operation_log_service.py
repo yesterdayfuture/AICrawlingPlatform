@@ -39,6 +39,9 @@ _PATH_RULES = [
     ("PUT",    r"^/api/tasks/\d+$", "任务中心", "更新任务"),
     ("DELETE", r"^/api/tasks/\d+$", "任务中心", "删除任务"),
     ("POST",   r"^/api/tasks/\d+/run$", "任务中心", "执行任务"),
+    ("POST",   r"^/api/tasks/\d+/schedule/start$", "任务中心", "启动定时"),
+    ("POST",   r"^/api/tasks/\d+/schedule/pause$", "任务中心", "暂停定时"),
+    ("POST",   r"^/api/tasks/\d+/schedule/stop$", "任务中心", "停止定时"),
     # 任务结果
     ("PUT",    r"^/api/task-results/\d+$", "任务结果", "更新任务结果"),
     ("DELETE", r"^/api/task-results/\d+$", "任务结果", "删除任务结果"),
