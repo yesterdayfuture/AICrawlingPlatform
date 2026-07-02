@@ -6,12 +6,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from .database import Base
+from .tz import now_cst
 
 
 class TimestampMixin:
-    """通用时间戳字段"""
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    """通用时间戳字段（统一北京时间）"""
+    created_at = Column(DateTime, default=now_cst, index=True)
+    updated_at = Column(DateTime, default=now_cst, onupdate=now_cst)
 
 
 class User(Base, TimestampMixin):
@@ -151,7 +152,7 @@ class TaskResultItem(Base):
     content = Column(Text, default="")
     error_message = Column(Text, default="")
     duration = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_cst)
 
     result = relationship("TaskResult", back_populates="items")
     crawler = relationship("Crawler", back_populates="result_items")

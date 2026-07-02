@@ -1,11 +1,11 @@
 """爬虫执行服务：支持 GET / POST"""
 import time
 import httpx
-from datetime import datetime
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..models import Crawler, TaskResult, TaskResultItem
+from ..tz import now_cst
 
 
 def execute_crawler(crawler: Crawler) -> dict:
@@ -58,7 +58,7 @@ def run_task(db: Session, task_id: int) -> TaskResult:
     if not task:
         raise ValueError(f"任务不存在: {task_id}")
 
-    started_at = datetime.utcnow()
+    started_at = now_cst()
     start_ts = time.time()
     name = f"{task.name} - {started_at.strftime('%Y-%m-%d %H:%M:%S')}"
     result = TaskResult(
@@ -108,7 +108,7 @@ def run_task(db: Session, task_id: int) -> TaskResult:
 
     result.success_count = success_count
     result.failed_count = failed_count
-    result.finished_at = datetime.utcnow()
+    result.finished_at = now_cst()
     result.duration = round(time.time() - start_ts, 3)
 
     task.last_run_at = result.finished_at

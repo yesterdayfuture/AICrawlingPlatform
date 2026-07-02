@@ -1,5 +1,5 @@
 """总览：统计卡片 + 时间折线图"""
-from datetime import datetime, timedelta
+from datetime import timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -9,6 +9,7 @@ from ..database import get_db
 from ..models import Crawler, LLMModel, Prompt, Task, TaskResult, ParseResult, User
 from ..security import get_current_user
 from ..services.export_service import build_export_response
+from ..tz import now_cst
 
 router = APIRouter()
 
@@ -79,7 +80,7 @@ def trend(
     db: Session = Depends(get_db),
 ):
     """按天聚合的折线图数据"""
-    end = datetime.utcnow()
+    end = now_cst()
     start = end - timedelta(days=days - 1)
     buckets = []
     cur = start

@@ -1,12 +1,12 @@
 """认证路由：登录、登出、获取当前用户、修改个人信息、修改密码"""
 import time
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..common import success
 from ..database import get_db
 from ..models import User
+from ..tz import now_cst
 from ..schemas import (
     LoginRequest, LoginResponse, UserOut,
     UserSelfUpdate, ChangePasswordRequest,
@@ -51,7 +51,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
             duration_ms=int((time.time() - start) * 1000),
         )
         raise HTTPException(status_code=403, detail="账户已被禁用，请联系管理员")
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = now_cst()
     db.commit()
     token = create_access_token(user.id, user.username, user.role)
     write_log(

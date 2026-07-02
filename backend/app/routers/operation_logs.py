@@ -131,10 +131,11 @@ def clear_logs(
     db: Session = Depends(get_db),
 ):
     """批量清理日志：before_days=0 清空全部，>0 仅清理 N 天前"""
-    from datetime import datetime, timedelta
+    from datetime import timedelta
+    from ..tz import now_cst
     q = db.query(OperationLog)
     if before_days > 0:
-        cutoff = datetime.utcnow() - timedelta(days=before_days)
+        cutoff = now_cst() - timedelta(days=before_days)
         q = q.filter(OperationLog.created_at < cutoff)
     count = q.count()
     q.delete(synchronize_session=False)
